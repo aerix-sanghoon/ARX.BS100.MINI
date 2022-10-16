@@ -30,17 +30,28 @@ typedef struct _DEVICE_LIST {
   DEVICE device[10];    
 } DEVICE_LIST;
 
+typedef struct _BLE_CONFIG{
+  unsigned int scan_time; // seconds
+  unsigned int scan_interval; // milli seconds;      
+} BLE_CONFIG;
+
 CTL_MESSAGE ctl_message;
 BLEScan* pBLEScan;
-const int json_capacity = JSON_OBJECT_SIZE(5);
+BLE_CONFIG ble_config;
 
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(115200);
   
+  ble_config.scan_time = 5;
+  ble_config.scan_interval = 100;
+  
   BLEDevice::init("");
   pBLEScan = BLEDevice::getScan();
-
+  pBLEScan->setActiveScan(true); //active scan uses more power, but get results faster
+  pBLEScan->setInterval(ble_config.scan_interval);
+  pBLEScan->setWindow(ble_config.scan_interval);  // less or equal setInterval value
+   
 }
 
 void loop() {
@@ -70,6 +81,33 @@ String parser(String input){
   if(cmd=="null"){
     response_doc["status"] = ERR_CMD_NOT_FOUND;
     serializeJson(response_doc,response);    
-    return response;
+  } else if(cmd=="scan"){
+    response_doc["status"] = OK;
+    
+    BLEScanResults foundDevices = pBLEScan->start(ble_config.scan_time,false);
+    int counts = foundDevices.getCount();
+    for (int i=0;i<counts;i++){
+      DynamicJsonDocument element_doc(1024);
+      String element;  
+      BLEAdvertisedDevice device = foundDevices.getDevice(i);
+      BLEAddress ble_address = device.getAddress();
+      String mac = ble_address.toString().c_str();
+      String manufacturer_data = device.getManufacturerData().c_str();
+
+      int rssi = device.getRSSI();
+      response_doc[mac]["rssi"] = String(rssi);
+      response_doc[mac]["manufacturerData"] = manufacturer_data;
+    }
+    serializeJson(response_doc,response);   
   }
+
+  return response;
 }
+
+/**
+BLEScanResults scan(){
+  BLEScanResults foundDevices = pBLEScan->start(ble_config.scan_time,false);
+  //pBLEScan->clearResults();
+
+  return foundDevices;
+}*/
